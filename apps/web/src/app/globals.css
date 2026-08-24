@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f7f7;
+  --foreground: #0f1c1c;
+  --card: #ffffff;
+  --card-foreground: #0f1c1c;
+  --muted: #e7eeee;
+  --muted-foreground: #5b6b6b;
+  --border: #d5e0e0;
+  --primary: #0f766e;
+  --primary-foreground: #f5fffd;
+  --accent: #ccfbf1;
+  --destructive: #b91c1c;
+  --ring: #0f766e;
+  --sidebar: #0b3d3a;
+  --sidebar-foreground: #e6fffa;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --font-sans: var(--font-geist-sans);
+  --radius-lg: var(--radius);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}

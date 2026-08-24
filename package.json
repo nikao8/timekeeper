@@ -1,0 +1,26 @@
+{
+  "name": "timekeeper",
+  "private": true,
+  "description": "Controle de ponto, jornada, banco de horas e gestão de funcionários",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "postinstall": "pnpm --filter @timekeeper/shared build",
+    "dev": "pnpm --filter @timekeeper/shared build && pnpm --parallel --filter @timekeeper/api --filter @timekeeper/web dev",
+    "dev:api": "pnpm --filter @timekeeper/api dev",
+    "dev:web": "pnpm --filter @timekeeper/web dev",
+    "build": "pnpm --filter @timekeeper/shared build && pnpm --filter @timekeeper/api --filter @timekeeper/web build",
+    "lint": "pnpm -r --if-present lint",
+    "lint:fix": "pnpm -r --if-present lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "test:e2e": "pnpm --filter @timekeeper/api test:e2e",
+    "db:migrate": "pnpm --filter @timekeeper/api prisma:migrate",
+    "db:migrate:deploy": "pnpm --filter @timekeeper/api prisma:migrate:deploy",
+    "db:seed": "pnpm --filter @timekeeper/api prisma:seed",
+    "db:studio": "pnpm --filter @timekeeper/api prisma:studio",
+    "db:generate": "pnpm --filter @timekeeper/api prisma:generate"
+  }
+}

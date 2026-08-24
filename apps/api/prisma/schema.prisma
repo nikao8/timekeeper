@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FUNCIONARIO
+  GESTOR
+}
+
+enum TimeEntryType {
+  ENTRADA
+  SAIDA_ALMOCO
+  RETORNO_ALMOCO
+  SAIDA
+}
+
+enum TimeEntrySource {
+  CLOCK
+  ADJUSTMENT
+  SYSTEM
+}
+
+enum TimeOffStatus {
+  PENDENTE
+  APROVADA
+  REJEITADA
+  CANCELADA
+}
+
+enum HolidayScope {
+  NATIONAL
+  STATE
+  MUNICIPAL
+}
+
+enum NotificationType {
+  TIME_ENTRY
+  TIME_OFF_REQUEST
+  TIME_OFF_DECISION
+  MISSING_CLOCK_OUT
+  GENERIC
+}
+
+enum TimeBankTransactionType {
+  DAILY_BALANCE
+  ADJUSTMENT
+  TIME_OFF
+  RECALCULATION
+}
+
+/// Authentication identity. A GESTOR is also a funcionário (has an Employee row).
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(FUNCIONARIO)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee            Employee?
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]           @relation("AuditActor")
+
+  @@index([role, isActive])
+}
+
+/// Work profile. Managers are employees who have `team` members via managerId.
+model Employee {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @unique @db.Uuid
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  document  String? @unique
+  phone     String?
+  hireDate  DateTime? @db.Date
+  jobTitle  String?
+  timezone  String  @default("America/Sao_Paulo")
+  isActive  Boolean @default(true)
+
+  managerId String?   @db.Uuid
+  manager   Employee? @relation("Team", fields: [managerId], references: [id])
+  team      Employee[] @relation("Team")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workSchedules         WorkSchedule[]
+  timeEntries           TimeEntry[]
+  timeBank              TimeBank?
+  timeBankTransactions  TimeBankTransaction[]
+  timeOffRequests       TimeOffRequest[]
+  adjustedEntries       TimeEntry[]           @relation("AdjustedBy")
+  timeOffDecisions      TimeOffRequest[]      @relation("TimeOffReviewer")
+
+  @@index([managerId])
+  @@index([isActive])
+  @@index([lastName, firstName])
+}
+
+model WorkSchedule {
+  id            String    @id @default(uuid()) @db.Uuid
+  employeeId    String    @db.Uuid
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name          String    @default("Padrão")
+  isActive      Boolean   @default(true)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  days WorkScheduleDay[]
+
+  @@index([employeeId, isActive])
+  @@index([employeeId, effectiveFrom])
+}
+
+model WorkScheduleDay {
+  id                       String       @id @default(uuid()) @db.Uuid
+  scheduleId               String       @db.Uuid
+  schedule                 WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  weekday                  Int
+  isWorkDay                Boolean      @default(true)
+  expectedStart            String?
+  expectedEnd              String?
+  lunchStart               String?
+  lunchEnd                 String?
+  expectedMinutes          Int          @default(480)
+  clockInToleranceMinutes  Int          @default(10)
+  clockOutToleranceMinutes Int          @default(10)
+
+  @@unique([scheduleId, weekday])
+  @@index([scheduleId])
+}
+
+/// Immutable punch. Adjustments deactivate the original (`isActive=false`) and insert a replacement.
+model TimeEntry {
+  id           String          @id @default(uuid()) @db.Uuid
+  employeeId   String          @db.Uuid
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type         TimeEntryType
+  occurredAt   DateTime
+  source       TimeEntrySource @default(CLOCK)
+  notes        String?
+  isActive     Boolean         @default(true)
+  replacedById String?         @unique @db.Uuid
+  replacedBy   TimeEntry?      @relation("EntryReplacement", fields: [replacedById], references: [id])
+  replaces     TimeEntry?      @relation("EntryReplacement")
+  adjustedById String?         @db.Uuid
+  adjustedBy   Employee?       @relation("AdjustedBy", fields: [adjustedById], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([employeeId, occurredAt])
+  @@index([employeeId, isActive, occurredAt])
+  @@index([employeeId, type, occurredAt])
+}
+
+model TimeBank {
+  id             String   @id @default(uuid()) @db.Uuid
+  employeeId     String   @unique @db.Uuid
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  balanceMinutes Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  transactions TimeBankTransaction[]
+}
+
+model TimeBankTransaction {
+  id              String                   @id @default(uuid()) @db.Uuid
+  timeBankId      String                   @db.Uuid
+  timeBank        TimeBank                 @relation(fields: [timeBankId], references: [id], onDelete: Cascade)
+  employeeId      String                   @db.Uuid
+  employee        Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type            TimeBankTransactionType
+  workDate        DateTime                 @db.Date
+  expectedMinutes Int                      @default(0)
+  workedMinutes   Int                      @default(0)
+  extraMinutes    Int                      @default(0)
+  negativeMinutes Int                      @default(0)
+  deltaMinutes    Int
+  balanceAfter    Int
+  metadata        Json?
+  createdAt       DateTime                 @default(now())
+
+  @@index([employeeId, workDate])
+  @@index([timeBankId, workDate])
+}
+
+model TimeOffRequest {
+  id           String        @id @default(uuid()) @db.Uuid
+  employeeId   String        @db.Uuid
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date         DateTime      @db.Date
+  reason       String
+  notes        String?
+  status       TimeOffStatus @default(PENDENTE)
+  reviewedById String?       @db.Uuid
+  reviewedBy   Employee?     @relation("TimeOffReviewer", fields: [reviewedById], references: [id])
+  reviewNotes  String?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId, date])
+  @@index([status, date])
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+model Holiday {
+  id          String       @id @default(uuid()) @db.Uuid
+  date        DateTime     @db.Date
+  name        String
+  description String?
+  scope       HolidayScope @default(NATIONAL)
+  stateCode   String?
+  cityCode    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([date, scope])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @db.Uuid
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  reason    String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
