@@ -1,8 +1,14 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { PrismaClient } from '@prisma/client';
+import { libsqlAdapterConfig } from './create-client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  constructor() {
+    super({ adapter: new PrismaLibSQL(libsqlAdapterConfig()) });
+  }
+
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }

@@ -109,18 +109,29 @@ export class TimeClockService {
       delay = delayMinutes(entrada.occurredAt, expectedStart, day.clockInToleranceMinutes);
     }
 
-    const pendingTimeOff = await this.prisma.timeOffRequest.count({
-      where: { employeeId: id, status: 'PENDENTE' },
-    });
-    const upcoming = await this.prisma.timeOffRequest.findMany({
-      where: {
-        employeeId: id,
-        status: { in: ['PENDENTE', 'APROVADA'] },
-        date: { gte: this.datetime.dateOnly(isoDate) },
-      },
-      orderBy: { date: 'asc' },
-      take: 5,
-    });
+    const dayDate = this.datetime.dateOnly(isoDate);
+    const [pendingTimeOff, upcoming, activeVacation] = await Promise.all([
+      this.prisma.timeOffRequest.count({
+        where: { employeeId: id, status: 'PENDENTE' },
+      }),
+      this.prisma.timeOffRequest.findMany({
+        where: {
+          employeeId: id,
+          status: { in: ['PENDENTE', 'APROVADA'] },
+          date: { gte: dayDate },
+        },
+        orderBy: { date: 'asc' },
+        take: 5,
+      }),
+      this.prisma.vacationRequest.findFirst({
+        where: {
+          employeeId: id,
+          status: 'APROVADA',
+          startDate: { lte: dayDate },
+          endDate: { gte: dayDate },
+        },
+      }),
+    ]);
 
     return {
       employeeId: id,
@@ -156,6 +167,10 @@ export class TimeClockService {
       timeBankFormatted: this.datetime.formatDuration(bank?.balanceMinutes ?? 0),
       pendingTimeOff,
       upcomingTimeOff: upcoming,
+      onVacation: Boolean(activeVacation),
+      vacation: activeVacation
+        ? { startDate: activeVacation.startDate, endDate: activeVacation.endDate }
+        : null,
       scheduleDay: day,
     };
   }

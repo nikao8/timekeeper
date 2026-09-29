@@ -1,7 +1,6 @@
 import {
   HolidayScope,
   NotificationType,
-  PrismaClient,
   Role,
   TimeBankTransactionType,
   TimeEntryType,
@@ -9,8 +8,9 @@ import {
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { DateTime } from 'luxon';
+import { createPrismaClient } from '../src/prisma/create-client';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 const TZ = 'America/Sao_Paulo';
 const PASSWORD = process.env.SEED_PASSWORD ?? 'Timekeeper@123';
 
@@ -30,6 +30,8 @@ const weekdayDays = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
 });
 
 async function main() {
+  await prisma.vacationRequest.deleteMany();
+  await prisma.vacationBalance.deleteMany();
   await prisma.timeBankTransaction.deleteMany();
   await prisma.timeBank.deleteMany();
   await prisma.timeEntry.deleteMany();
@@ -142,6 +144,9 @@ async function main() {
       },
     });
     await prisma.timeBank.create({ data: { employeeId: employee.id, balanceMinutes: 0 } });
+    await prisma.vacationBalance.create({
+      data: { employeeId: employee.id, year: DateTime.now().setZone(TZ).year, entitledDays: 30, usedDays: 0 },
+    });
   }
 
   await prisma.holiday.createMany({
@@ -182,6 +187,37 @@ async function main() {
         reviewedAt: new Date(),
       },
     ],
+  });
+
+  const year = DateTime.now().setZone(TZ).year;
+  const vacationStart = DateTime.now().setZone(TZ).plus({ days: 20 }).startOf('day');
+  const vacationEnd = vacationStart.plus({ days: 4 });
+  await prisma.vacationRequest.create({
+    data: {
+      employeeId: carlos.id,
+      startDate: vacationStart.toJSDate(),
+      endDate: vacationEnd.toJSDate(),
+      days: 5,
+      reason: 'Férias de fim de ano',
+      status: TimeOffStatus.APROVADA,
+      reviewedById: ana.id,
+      reviewedAt: new Date(),
+    },
+  });
+  await prisma.vacationBalance.update({
+    where: { employeeId_year: { employeeId: carlos.id, year } },
+    data: { usedDays: 5 },
+  });
+  const pendingStart = DateTime.now().setZone(TZ).plus({ days: 40 }).startOf('day');
+  await prisma.vacationRequest.create({
+    data: {
+      employeeId: joao.id,
+      startDate: pendingStart.toJSDate(),
+      endDate: pendingStart.plus({ days: 9 }).toJSDate(),
+      days: 10,
+      reason: 'Viagem em família',
+      status: TimeOffStatus.PENDENTE,
+    },
   });
 
   await prisma.notification.createMany({

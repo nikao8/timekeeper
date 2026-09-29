@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Palmtree,
   Settings,
   Timer,
   Users,
@@ -30,6 +31,7 @@ const employeeNav = [
   { href: '/banco-de-horas', label: 'Banco de horas', icon: Wallet },
   { href: '/historico', label: 'Histórico', icon: History },
   { href: '/solicitacoes', label: 'Solicitações', icon: CalendarClock },
+  { href: '/ferias', label: 'Férias', icon: Palmtree },
   { href: '/notificacoes', label: 'Notificações', icon: Bell },
 ];
 
@@ -53,7 +55,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
   const { data: pendingApprovals } = useQuery({
     queryKey: ['approvals-count'],
-    queryFn: () => apiGet<{ count: number }>('/time-off/pending-count'),
+    queryFn: async () => {
+      const [timeOff, vacations] = await Promise.all([
+        apiGet<{ count: number }>('/time-off/pending-count'),
+        apiGet<{ count: number }>('/vacations/pending-count'),
+      ]);
+      return { count: timeOff.count + vacations.count };
+    },
     enabled: Boolean(user) && isManager,
   });
 

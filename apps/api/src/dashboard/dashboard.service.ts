@@ -42,9 +42,24 @@ export class DashboardService {
       }),
     );
 
-    const pending = await this.prisma.timeOffRequest.count({
-      where: { status: TimeOffStatus.PENDENTE, employee: { managerId: user.employeeId } },
-    });
+    const day = this.datetime.dateOnly(this.datetime.today());
+    const [pending, pendingVacations, onVacation] = await Promise.all([
+      this.prisma.timeOffRequest.count({
+        where: { status: TimeOffStatus.PENDENTE, employee: { managerId: user.employeeId } },
+      }),
+      this.prisma.vacationRequest.count({
+        where: { status: TimeOffStatus.PENDENTE, employee: { managerId: user.employeeId } },
+      }),
+      this.prisma.vacationRequest.findMany({
+        where: {
+          status: TimeOffStatus.APROVADA,
+          startDate: { lte: day },
+          endDate: { gte: day },
+          employee: { managerId: user.employeeId },
+        },
+        include: { employee: { select: { id: true, firstName: true, lastName: true } } },
+      }),
+    ]);
 
     const ranking = [...team]
       .map((employee) => ({
@@ -72,6 +87,8 @@ export class DashboardService {
             item.status === WorkStatus.JORNADA_FINALIZADA,
         ).length,
         pendingTimeOff: pending,
+        pendingVacations,
+        onVacation: onVacation.length,
       },
       ranking: ranking.map((item) => ({
         ...item,
@@ -90,6 +107,12 @@ export class DashboardService {
         occurredAt: entry.occurredAt,
         time: this.datetime.fromUtc(entry.occurredAt).toFormat('HH:mm'),
         employeeName: `${entry.employee.firstName} ${entry.employee.lastName}`,
+      })),
+      vacationsToday: onVacation.map((request) => ({
+        employeeId: request.employee.id,
+        fullName: `${request.employee.firstName} ${request.employee.lastName}`,
+        startDate: request.startDate,
+        endDate: request.endDate,
       })),
     };
   }

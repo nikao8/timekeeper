@@ -46,9 +46,6 @@ tmp
 uploads
 *.xlsx
 
-# Docker volumes (local)
-docker-data
-
 # Misc
 .turbo
 .cache

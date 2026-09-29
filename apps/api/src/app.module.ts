@@ -17,6 +17,7 @@ import { ReportsModule } from './reports/reports.module';
 import { TimeBankModule } from './time-bank/time-bank.module';
 import { TimeClockModule } from './time-clock/time-clock.module';
 import { TimeOffModule } from './time-off/time-off.module';
+import { VacationModule } from './vacations/vacation.module';
 import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
     TimeClockModule,
     TimeBankModule,
     TimeOffModule,
+    VacationModule,
     NotificationsModule,
     HolidaysModule,
     ReportsModule,

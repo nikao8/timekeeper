@@ -19,24 +19,20 @@ endif
 ifneq ($(findstring /,$(PNPM)),)
   export PATH := $(dir $(PNPM)):$(PATH)
 endif
-COMPOSE ?= docker compose
-POSTGRES_USER ?= timekeeper
-POSTGRES_DB ?= timekeeper
 
-.PHONY: help setup env install postgres postgres-wait db-generate db-migrate db-seed db-reset db-studio \
-	dev start dev-api dev-web build lint test up down logs docker-up docker-down docker-build docker-rebuild clean
+.PHONY: help setup env install db-generate db-migrate db-seed db-reset db-studio \
+	dev start dev-api dev-web build lint test clean
 
 help: ## Lista os comandos disponíveis
 	@awk 'BEGIN {FS = ":.*##"; printf "\nTimekeeper\n\n"} \
 		/^[a-zA-Z0-9_.-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf "\nFluxo local típico:  make setup && make start\n"
-	@printf "Stack Docker:        make docker-up\n\n"
+	@printf "\nFluxo local típico:  make setup && make start\n\n"
 
 # ---------------------------------------------------------------------------
 # Primeira execução
 # ---------------------------------------------------------------------------
 
-setup: env install postgres postgres-wait db-generate db-migrate db-seed ## Instala deps, sobe o Postgres, migra e popula o banco
+setup: env install db-generate db-migrate db-seed ## Instala deps, migra o banco (Turso, se configurado) e popula
 	@echo ""
 	@echo "Pronto. Suba o projeto com:  make start"
 	@echo "  Web  http://localhost:3000"
@@ -56,42 +52,30 @@ install: ## Instala as dependências do monorepo
 	$(PNPM) install
 
 # ---------------------------------------------------------------------------
-# Banco (Docker — só PostgreSQL)
+# Banco (Turso / libSQL; SQLite local só para gerar migrations)
 # ---------------------------------------------------------------------------
-
-postgres: ## Sobe o PostgreSQL em background
-	$(COMPOSE) up -d postgres
-
-postgres-wait: ## Aguarda o PostgreSQL ficar healthy
-	@echo "Aguardando PostgreSQL..."
-	@for i in $$(seq 1 30); do \
-		if $(COMPOSE) exec -T postgres pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) >/dev/null 2>&1; then \
-			echo "PostgreSQL pronto."; exit 0; \
-		fi; \
-		sleep 1; \
-	done; \
-	echo "PostgreSQL não respondeu a tempo." >&2; exit 1
 
 db-generate: ## Gera o Prisma Client
 	$(PNPM) db:generate
 
-db-migrate: ## Aplica migrations (desenvolvimento)
+db-migrate: ## Gera a migration local e aplica no Turso quando houver credenciais
 	$(PNPM) db:migrate
 
-db-seed: ## Popula o banco com dados de desenvolvimento
+db-seed: ## Popula o banco (Turso, se TURSO_* estiver definido; senão o SQLite local)
 	$(PNPM) db:seed
 
-db-reset: postgres postgres-wait ## Recria o schema, aplica migrations e executa o seed
+db-reset: ## Recria o schema local, aplica no Turso e executa o seed
 	$(PNPM) --filter @timekeeper/api exec prisma migrate reset --force
+	$(PNPM) --filter @timekeeper/api exec tsx prisma/apply-turso.ts
 
-db-studio: ## Abre o Prisma Studio
+db-studio: ## Abre o Prisma Studio no SQLite local
 	$(PNPM) db:studio
 
 # ---------------------------------------------------------------------------
-# Desenvolvimento local (API + Web fora do Docker)
+# Desenvolvimento local
 # ---------------------------------------------------------------------------
 
-start: postgres postgres-wait ## Sobe Postgres (se necessário) e inicia API + Web
+start: ## Inicia API + Web
 	$(PNPM) dev
 
 dev: start ## Alias de start
@@ -115,35 +99,6 @@ lint: ## Executa o linter em todos os pacotes
 test: ## Executa os testes unitários da API
 	$(PNPM) test
 
-# ---------------------------------------------------------------------------
-# Docker — stack completa (postgres + api + web)
-# ---------------------------------------------------------------------------
-
-up: postgres ## Sobe só o Postgres (uso local com pnpm)
-	@echo "Postgres em localhost:5432. Use make start para API e web."
-
-docker-up: env ## Builda e sobe postgres + api + web em containers
-	$(COMPOSE) --profile full up --build -d
-	@echo "Web  http://localhost:3000"
-	@echo "API  http://localhost:3001"
-
-docker-build: ## Builda as imagens da API e do web sem subir
-	$(COMPOSE) --profile full build
-
-docker-rebuild: ## Rebuilda as imagens sem cache e sobe a stack
-	$(COMPOSE) --profile full build --no-cache
-	$(COMPOSE) --profile full up -d
-
-docker-down: ## Para a stack Docker (mantém o volume do Postgres)
-	$(COMPOSE) --profile full down
-
-down: ## Para o Postgres (e a stack full, se estiver no ar)
-	$(COMPOSE) --profile full down
-
-logs: ## Acompanha os logs do Compose
-	$(COMPOSE) --profile full logs -f
-
-clean: ## Remove node_modules, builds e containers (mantém o volume do banco)
-	$(COMPOSE) --profile full down
+clean: ## Remove node_modules e builds
 	rm -rf node_modules apps/api/node_modules apps/web/node_modules packages/shared/node_modules
 	rm -rf apps/api/dist apps/web/.next packages/shared/dist

@@ -36,6 +36,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       void queryClient.invalidateQueries({ queryKey: ['time-clock'] });
       void queryClient.invalidateQueries({ queryKey: ['approvals'] });
       void queryClient.invalidateQueries({ queryKey: ['approvals-count'] });
+      void queryClient.invalidateQueries({ queryKey: ['vacations'] });
     });
     socket.on('time-clock', () => {
       void queryClient.invalidateQueries({ queryKey: ['time-clock'] });

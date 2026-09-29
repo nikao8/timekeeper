@@ -30,6 +30,8 @@ type TeamDash = {
     atLunch: number;
     away: number;
     pendingTimeOff: number;
+    pendingVacations: number;
+    onVacation: number;
   };
   ranking: Array<{ employeeId: string; fullName: string; balanceFormatted: string; balanceMinutes: number }>;
   activity: Array<{ id: string; time: string; employeeName: string; type: string }>;
@@ -129,12 +131,14 @@ export default function DashboardPage() {
       {isManager && team && (
         <>
           <h2 className="text-xl font-semibold">Equipe</h2>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
             <Stat label="Ativos" value={String(team.summary.activeEmployees)} />
             <Stat label="Trabalhando agora" value={String(team.summary.working)} />
             <Stat label="Em almoço" value={String(team.summary.atLunch)} />
             <Stat label="Ausentes" value={String(team.summary.away)} />
+            <Stat label="Em férias hoje" value={String(team.summary.onVacation)} />
             <Stat label="Folgas pendentes" value={String(team.summary.pendingTimeOff)} />
+            <Stat label="Férias pendentes" value={String(team.summary.pendingVacations)} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>

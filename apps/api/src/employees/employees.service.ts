@@ -34,10 +34,10 @@ export class EmployeesService {
     if (query.search) {
       const q = query.search.trim();
       where.OR = [
-        { firstName: { contains: q, mode: 'insensitive' } },
-        { lastName: { contains: q, mode: 'insensitive' } },
-        { user: { email: { contains: q, mode: 'insensitive' } } },
-        { document: { contains: q, mode: 'insensitive' } },
+        { firstName: { contains: q } },
+        { lastName: { contains: q } },
+        { user: { email: { contains: q } } },
+        { document: { contains: q } },
       ];
     }
 
@@ -117,6 +117,14 @@ export class EmployeesService {
         },
       });
       await tx.timeBank.create({ data: { employeeId: employee.id, balanceMinutes: 0 } });
+      await tx.vacationBalance.create({
+        data: {
+          employeeId: employee.id,
+          year: Number(this.datetime.today().slice(0, 4)),
+          entitledDays: 30,
+          usedDays: 0,
+        },
+      });
       return employee;
     });
 

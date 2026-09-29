@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -42,6 +42,8 @@ enum NotificationType {
   TIME_ENTRY
   TIME_OFF_REQUEST
   TIME_OFF_DECISION
+  VACATION_REQUEST
+  VACATION_DECISION
   MISSING_CLOCK_OUT
   GENERIC
 }
@@ -55,7 +57,7 @@ enum TimeBankTransactionType {
 
 /// Authentication identity. A GESTOR is also a funcionário (has an Employee row).
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
   role         Role     @default(FUNCIONARIO)
@@ -74,19 +76,19 @@ model User {
 
 /// Work profile. Managers are employees who have `team` members via managerId.
 model Employee {
-  id        String  @id @default(uuid()) @db.Uuid
-  userId    String  @unique @db.Uuid
+  id        String  @id @default(uuid())
+  userId    String  @unique
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName String
   lastName  String
   document  String? @unique
   phone     String?
-  hireDate  DateTime? @db.Date
+  hireDate  DateTime?
   jobTitle  String?
   timezone  String  @default("America/Sao_Paulo")
   isActive  Boolean @default(true)
 
-  managerId String?   @db.Uuid
+  managerId String?  
   manager   Employee? @relation("Team", fields: [managerId], references: [id])
   team      Employee[] @relation("Team")
 
@@ -100,6 +102,9 @@ model Employee {
   timeOffRequests       TimeOffRequest[]
   adjustedEntries       TimeEntry[]           @relation("AdjustedBy")
   timeOffDecisions      TimeOffRequest[]      @relation("TimeOffReviewer")
+  vacationBalances      VacationBalance[]
+  vacationRequests      VacationRequest[]
+  vacationDecisions     VacationRequest[]     @relation("VacationReviewer")
 
   @@index([managerId])
   @@index([isActive])
@@ -107,13 +112,13 @@ model Employee {
 }
 
 model WorkSchedule {
-  id            String    @id @default(uuid()) @db.Uuid
-  employeeId    String    @db.Uuid
+  id            String    @id @default(uuid())
+  employeeId    String   
   employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   name          String    @default("Padrão")
   isActive      Boolean   @default(true)
-  effectiveFrom DateTime  @db.Date
-  effectiveTo   DateTime? @db.Date
+  effectiveFrom DateTime 
+  effectiveTo   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -124,8 +129,8 @@ model WorkSchedule {
 }
 
 model WorkScheduleDay {
-  id                       String       @id @default(uuid()) @db.Uuid
-  scheduleId               String       @db.Uuid
+  id                       String       @id @default(uuid())
+  scheduleId               String      
   schedule                 WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   weekday                  Int
   isWorkDay                Boolean      @default(true)
@@ -143,18 +148,18 @@ model WorkScheduleDay {
 
 /// Immutable punch. Adjustments deactivate the original (`isActive=false`) and insert a replacement.
 model TimeEntry {
-  id           String          @id @default(uuid()) @db.Uuid
-  employeeId   String          @db.Uuid
+  id           String          @id @default(uuid())
+  employeeId   String         
   employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   type         TimeEntryType
   occurredAt   DateTime
   source       TimeEntrySource @default(CLOCK)
   notes        String?
   isActive     Boolean         @default(true)
-  replacedById String?         @unique @db.Uuid
+  replacedById String?         @unique
   replacedBy   TimeEntry?      @relation("EntryReplacement", fields: [replacedById], references: [id])
   replaces     TimeEntry?      @relation("EntryReplacement")
-  adjustedById String?         @db.Uuid
+  adjustedById String?        
   adjustedBy   Employee?       @relation("AdjustedBy", fields: [adjustedById], references: [id])
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -165,8 +170,8 @@ model TimeEntry {
 }
 
 model TimeBank {
-  id             String   @id @default(uuid()) @db.Uuid
-  employeeId     String   @unique @db.Uuid
+  id             String   @id @default(uuid())
+  employeeId     String   @unique
   employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   balanceMinutes Int      @default(0)
   updatedAt      DateTime @updatedAt
@@ -175,13 +180,13 @@ model TimeBank {
 }
 
 model TimeBankTransaction {
-  id              String                   @id @default(uuid()) @db.Uuid
-  timeBankId      String                   @db.Uuid
+  id              String                   @id @default(uuid())
+  timeBankId      String                  
   timeBank        TimeBank                 @relation(fields: [timeBankId], references: [id], onDelete: Cascade)
-  employeeId      String                   @db.Uuid
+  employeeId      String                  
   employee        Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   type            TimeBankTransactionType
-  workDate        DateTime                 @db.Date
+  workDate        DateTime                
   expectedMinutes Int                      @default(0)
   workedMinutes   Int                      @default(0)
   extraMinutes    Int                      @default(0)
@@ -196,14 +201,14 @@ model TimeBankTransaction {
 }
 
 model TimeOffRequest {
-  id           String        @id @default(uuid()) @db.Uuid
-  employeeId   String        @db.Uuid
+  id           String        @id @default(uuid())
+  employeeId   String       
   employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date         DateTime      @db.Date
+  date         DateTime     
   reason       String
   notes        String?
   status       TimeOffStatus @default(PENDENTE)
-  reviewedById String?       @db.Uuid
+  reviewedById String?      
   reviewedBy   Employee?     @relation("TimeOffReviewer", fields: [reviewedById], references: [id])
   reviewNotes  String?
   reviewedAt   DateTime?
@@ -214,9 +219,43 @@ model TimeOffRequest {
   @@index([status, date])
 }
 
+/// Saldo anual de férias (dias corridos). 30 dias é o padrão CLT.
+model VacationBalance {
+  id           String   @id @default(uuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  year         Int
+  entitledDays Int      @default(30)
+  usedDays     Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, year])
+  @@index([employeeId])
+}
+
+model VacationRequest {
+  id           String        @id @default(uuid())
+  employeeId   String
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate    DateTime
+  endDate      DateTime
+  days         Int
+  reason       String?
+  status       TimeOffStatus @default(PENDENTE)
+  reviewedById String?
+  reviewedBy   Employee?     @relation("VacationReviewer", fields: [reviewedById], references: [id])
+  reviewNotes  String?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId, startDate])
+  @@index([status, startDate])
+}
+
 model Notification {
-  id        String           @id @default(uuid()) @db.Uuid
-  userId    String           @db.Uuid
+  id        String           @id @default(uuid())
+  userId    String          
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      NotificationType
   title     String
@@ -229,8 +268,8 @@ model Notification {
 }
 
 model Holiday {
-  id          String       @id @default(uuid()) @db.Uuid
-  date        DateTime     @db.Date
+  id          String       @id @default(uuid())
+  date        DateTime    
   name        String
   description String?
   scope       HolidayScope @default(NATIONAL)
@@ -243,8 +282,8 @@ model Holiday {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  actorId   String?  @db.Uuid
+  id        String   @id @default(uuid())
+  actorId   String? 
   actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
   action    String
   entity    String
@@ -261,8 +300,8 @@ model AuditLog {
 }
 
 model PasswordResetToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
+  id        String    @id @default(uuid())
+  userId    String   
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique
   expiresAt DateTime
@@ -273,8 +312,8 @@ model PasswordResetToken {
 }
 
 model RefreshToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
+  id        String    @id @default(uuid())
+  userId    String   
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique
   expiresAt DateTime

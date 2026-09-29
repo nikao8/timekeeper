@@ -66,7 +66,7 @@ export class TimeBankService {
     const from = this.datetime.startOfDayUtc(isoDate, timezone);
     const to = this.datetime.endOfDayUtc(isoDate, timezone);
 
-    const [entries, holiday, timeOff] = await Promise.all([
+    const [entries, holiday, timeOff, vacation] = await Promise.all([
       this.prisma.timeEntry.findMany({
         where: { employeeId, isActive: true, occurredAt: { gte: from, lte: to } },
         orderBy: { occurredAt: 'asc' },
@@ -79,10 +79,18 @@ export class TimeBankService {
           status: TimeOffStatus.APROVADA,
         },
       }),
+      this.prisma.vacationRequest.findFirst({
+        where: {
+          employeeId,
+          status: TimeOffStatus.APROVADA,
+          startDate: { lte: this.datetime.dateOnly(isoDate) },
+          endDate: { gte: this.datetime.dateOnly(isoDate) },
+        },
+      }),
     ]);
 
     const { day } = await this.safeDay(employeeId, isoDate, timezone);
-    const isExempt = Boolean(holiday || timeOff || !day?.isWorkDay);
+    const isExempt = Boolean(holiday || timeOff || vacation || !day?.isWorkDay);
     const expectedMinutes = isExempt ? 0 : (day?.expectedMinutes ?? 0);
     const workedMinutes = computeWorkedMinutes(entries, this.datetime.nowUtc());
     const balance = computeDailyBalance(workedMinutes, expectedMinutes);
@@ -113,6 +121,7 @@ export class TimeBankService {
             metadata: {
               holidayId: holiday?.id ?? null,
               timeOffId: timeOff?.id ?? null,
+              vacationId: vacation?.id ?? null,
               exempt: isExempt,
             },
           },
@@ -133,6 +142,7 @@ export class TimeBankService {
             metadata: {
               holidayId: holiday?.id ?? null,
               timeOffId: timeOff?.id ?? null,
+              vacationId: vacation?.id ?? null,
               exempt: isExempt,
             },
           },

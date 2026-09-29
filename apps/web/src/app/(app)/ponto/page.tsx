@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiGet, apiPost, ApiError } from '@/lib/api';
-import { formatClockBR, formatLongDateBR, formatTimeBR } from '@/lib/datetime';
+import { formatClockBR, formatDateBR, formatLongDateBR, formatTimeBR } from '@/lib/datetime';
 import { useAuth } from '@/providers/auth-provider';
 
 type Snapshot = {
@@ -17,6 +17,8 @@ type Snapshot = {
   journey: { entrada: string | null; saidaAlmoco: string | null; retornoAlmoco: string | null; saida: string | null };
   workedFormatted: string;
   dayBalanceFormatted: string;
+  onVacation?: boolean;
+  vacation?: { startDate: string; endDate: string } | null;
   entries: Array<{ id: string; type: string; time: string }>;
 };
 
@@ -68,6 +70,12 @@ export default function TimeClockPage() {
       {data && (
         <>
           <Badge tone={statusTone(data.status)}>{translateWorkStatus(data.status)}</Badge>
+          {data.onVacation && data.vacation && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Você está de férias ({formatDateBR(data.vacation.startDate)} a {formatDateBR(data.vacation.endDate)}). O dia
+              não gera saldo negativo no banco de horas.
+            </p>
+          )}
           <div className="grid gap-3">
             {data.allowedActions.map((action) => (
               <Button key={action} size="xl" className="h-16 w-full" onClick={() => clock.mutate(action)}>
