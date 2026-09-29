@@ -27,9 +27,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         socket.emit('join-team', user.employee.id);
       }
     });
-    socket.on('notification', () => {
+    socket.on('notification', (payload: { type?: string }) => {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       void queryClient.invalidateQueries({ queryKey: ['notifications-count'] });
+      if (payload?.type === 'TIME_BANK_ADJUSTMENT') {
+        void queryClient.invalidateQueries({ queryKey: ['time-bank'] });
+      }
     });
     socket.on('team-event', () => {
       void queryClient.invalidateQueries({ queryKey: ['dashboard-team'] });

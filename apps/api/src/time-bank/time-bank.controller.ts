@@ -1,10 +1,11 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { AuthUser } from '../auth/auth.types';
+import { AdjustTimeBankDto } from './dto/adjust-time-bank.dto';
 import { TimeBankService } from './time-bank.service';
 
 @ApiTags('time-bank')
@@ -25,6 +26,18 @@ export class TimeBankController {
   @ApiOperation({ summary: 'Saldos da equipe' })
   team(@CurrentUser() user: AuthUser) {
     return this.timeBank.teamBalances(user);
+  }
+
+  @Post(':employeeId/adjustments')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GESTOR)
+  @ApiOperation({ summary: 'Lançar crédito ou débito no banco de horas' })
+  adjust(
+    @CurrentUser() user: AuthUser,
+    @Param('employeeId') employeeId: string,
+    @Body() dto: AdjustTimeBankDto,
+  ) {
+    return this.timeBank.adjust(user, employeeId, dto);
   }
 
   @Get(':employeeId')

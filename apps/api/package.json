@@ -20,11 +20,11 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev && node --env-file=.env --import tsx prisma/apply-turso.ts",
-    "prisma:migrate:deploy": "prisma migrate deploy && node --env-file=.env --import tsx prisma/apply-turso.ts",
-    "prisma:seed": "prisma db seed",
-    "prisma:studio": "prisma studio"
+    "prisma:generate": "node --env-file=../../.env ./node_modules/prisma/build/index.js generate",
+    "prisma:migrate": "node --env-file=../../.env ./node_modules/prisma/build/index.js migrate dev && node --env-file=../../.env --import tsx prisma/apply-turso.ts",
+    "prisma:migrate:deploy": "node --env-file=../../.env ./node_modules/prisma/build/index.js migrate deploy && node --env-file=../../.env --import tsx prisma/apply-turso.ts",
+    "prisma:seed": "node --env-file=../../.env ./node_modules/prisma/build/index.js db seed",
+    "prisma:studio": "node --env-file=../../.env ./node_modules/prisma/build/index.js studio"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

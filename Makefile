@@ -41,9 +41,8 @@ setup: env install db-generate db-migrate db-seed ## Instala deps, migra o banco
 	@echo "  Gestor      gestor@example.com / Timekeeper@123"
 	@echo "  Funcionário funcionario@example.com / Timekeeper@123"
 
-env: ## Cria .env e apps/api/.env a partir do exemplo (não sobrescreve)
+env: ## Cria o .env da raiz a partir do exemplo (não sobrescreve)
 	@if [ ! -f .env ]; then cp .env.example .env && echo "Criado .env"; else echo ".env já existe"; fi
-	@if [ ! -f apps/api/.env ]; then cp .env.example apps/api/.env && echo "Criado apps/api/.env"; else echo "apps/api/.env já existe"; fi
 	@if [ ! -f apps/web/.env.local ]; then \
 		printf 'NEXT_PUBLIC_API_URL=http://localhost:3001\n' > apps/web/.env.local && echo "Criado apps/web/.env.local"; \
 	else echo "apps/web/.env.local já existe"; fi
@@ -65,8 +64,8 @@ db-seed: ## Popula o banco (Turso, se TURSO_* estiver definido; senão o SQLite 
 	$(PNPM) db:seed
 
 db-reset: ## Recria o schema local, aplica no Turso e executa o seed
-	$(PNPM) --filter @timekeeper/api exec prisma migrate reset --force
-	$(PNPM) --filter @timekeeper/api exec tsx prisma/apply-turso.ts
+	$(PNPM) --filter @timekeeper/api exec node --env-file=../../.env ./node_modules/prisma/build/index.js migrate reset --force
+	$(PNPM) --filter @timekeeper/api exec node --env-file=../../.env --import tsx prisma/apply-turso.ts
 
 db-studio: ## Abre o Prisma Studio no SQLite local
 	$(PNPM) db:studio

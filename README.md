@@ -52,8 +52,7 @@ timekeeper/
 
 ```bash
 cp .env.example .env
-cp .env.example apps/api/.env
-# Preencha TURSO_DATABASE_URL e TURSO_AUTH_TOKEN nos dois arquivos
+# Preencha TURSO_DATABASE_URL e TURSO_AUTH_TOKEN
 pnpm install
 ```
 

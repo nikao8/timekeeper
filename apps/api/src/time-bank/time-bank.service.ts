@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { TimeBankTransactionType, TimeOffStatus } from '@prisma/client';
+import { NotificationType, Prisma, TimeBankTransactionType, TimeOffStatus } from '@prisma/client';
+import { ErrorCode } from '@timekeeper/shared';
+import { AuditService } from '../audit/audit.service';
 import { computeDailyBalance, computeWorkedMinutes } from '../time-clock/time-clock.rules';
 import type { AuthUser } from '../auth/auth.types';
 import { DateTimeService } from '../common/datetime/datetime.service';
+import { AppException } from '../common/errors/app.exception';
 import { EmployeeAccessService } from '../employees/employee-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkScheduleService } from '../work-schedules/work-schedule.service';
+import { AdjustTimeBankDto } from './dto/adjust-time-bank.dto';
 
 @Injectable()
 export class TimeBankService {
@@ -16,6 +21,8 @@ export class TimeBankService {
     private readonly access: EmployeeAccessService,
     private readonly datetime: DateTimeService,
     private readonly schedules: WorkScheduleService,
+    private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   async getBalance(user: AuthUser, employeeId: string) {
@@ -31,6 +38,7 @@ export class TimeBankService {
       balanceFormatted: this.datetime.formatDuration(bank.balanceMinutes),
       transactions: transactions.map((tx) => ({
         ...tx,
+        note: this.noteOf(tx.metadata),
         deltaFormatted: this.datetime.formatDuration(tx.deltaMinutes),
         expectedFormatted: this.datetime.formatDuration(tx.expectedMinutes, false),
         workedFormatted: this.datetime.formatDuration(tx.workedMinutes, false),
@@ -55,6 +63,71 @@ export class TimeBankService {
         negativeMinutes: Math.max(0, -minutes),
       };
     });
+  }
+
+  async adjust(user: AuthUser, employeeId: string, dto: AdjustTimeBankDto) {
+    const employee = await this.access.assertCanManage(user, employeeId);
+    const minutes = dto.hours * 60 + dto.minutes;
+    if (minutes < 1) {
+      throw new AppException(ErrorCode.TIME_BANK_INVALID_MINUTES, 'Informe ao menos 1 minuto.');
+    }
+    const note = dto.note.trim();
+    const delta = dto.direction === 'DEBITO' ? -minutes : minutes;
+    const bank = await this.ensureBank(employeeId);
+    const balanceAfter = bank.balanceMinutes + delta;
+    const today = this.datetime.today(employee.timezone);
+
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.timeBankTransaction.create({
+        data: {
+          timeBankId: bank.id,
+          employeeId,
+          type: TimeBankTransactionType.ADJUSTMENT,
+          workDate: this.datetime.dateOnly(today),
+          extraMinutes: delta > 0 ? delta : 0,
+          negativeMinutes: delta < 0 ? -delta : 0,
+          deltaMinutes: delta,
+          balanceAfter,
+          metadata: {
+            note,
+            direction: dto.direction,
+            actorEmployeeId: user.employeeId,
+          },
+        },
+      });
+      await tx.timeBank.update({
+        where: { id: bank.id },
+        data: { balanceMinutes: balanceAfter },
+      });
+      return created;
+    });
+
+    const deltaFormatted = this.datetime.formatDuration(delta);
+    const kindLabel = dto.direction === 'DEBITO' ? 'débito' : 'crédito';
+    await this.notifications.create({
+      userId: employee.user.id,
+      type: NotificationType.TIME_BANK_ADJUSTMENT,
+      title: 'Banco de horas ajustado',
+      message: `Seu gestor lançou um ${kindLabel} de ${deltaFormatted} no banco de horas. Observação: ${note}`,
+      metadata: { transactionId: transaction.id, deltaMinutes: delta, note },
+    });
+    await this.audit.record({
+      actorId: user.id,
+      action: 'TIME_BANK_ADJUST',
+      entity: 'TimeBank',
+      entityId: bank.id,
+      reason: note,
+      before: { balanceMinutes: bank.balanceMinutes },
+      after: { balanceMinutes: balanceAfter, deltaMinutes: delta, direction: dto.direction },
+    });
+    this.logger.log(`Adjusted bank of ${employeeId} by ${delta} (${dto.direction})`);
+
+    return {
+      balanceMinutes: balanceAfter,
+      balanceFormatted: this.datetime.formatDuration(balanceAfter),
+      deltaFormatted,
+      note,
+    };
   }
 
   async settleDay(employeeId: string, isoDate: string): Promise<void> {
@@ -176,6 +249,13 @@ export class TimeBankService {
     const extraMinutes = txs.reduce((sum, tx) => sum + tx.extraMinutes, 0);
     const negativeMinutes = txs.reduce((sum, tx) => sum + tx.negativeMinutes, 0);
     return { expectedMinutes, workedMinutes, extraMinutes, negativeMinutes, days: txs };
+  }
+
+  private noteOf(metadata: Prisma.JsonValue | null): string | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) || !('note' in metadata)) {
+      return null;
+    }
+    return typeof metadata.note === 'string' ? metadata.note : null;
   }
 
   private async ensureBank(employeeId: string) {

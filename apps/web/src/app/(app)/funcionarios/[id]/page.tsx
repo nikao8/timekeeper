@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input, Label } from '@/components/ui/input';
+import { Input, Label, Textarea } from '@/components/ui/input';
 import { apiGet, apiPost, apiPut, ApiError } from '@/lib/api';
 import { formatTimeBR } from '@/lib/datetime';
 
@@ -47,6 +47,14 @@ export default function EmployeeDetailPage() {
   });
   const [reason, setReason] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
+  const [direction, setDirection] = useState<'CREDITO' | 'DEBITO'>('CREDITO');
+  const [hours, setHours] = useState('0');
+  const [minutes, setMinutes] = useState('0');
+  const [note, setNote] = useState('');
+  const { data: bank } = useQuery({
+    queryKey: ['time-bank', id],
+    queryFn: () => apiGet<{ balanceFormatted: string }>(`/time-bank/${id}`),
+  });
   const adjust = useMutation({
     mutationFn: () =>
       apiPost(`/time-clock/${id}/adjustments`, {
@@ -56,6 +64,24 @@ export default function EmployeeDetailPage() {
       }),
     onSuccess: () => toast.success('Ajuste registrado'),
     onError: (error: unknown) => toast.error(error instanceof ApiError ? error.message : 'Erro'),
+  });
+  const adjustBank = useMutation({
+    mutationFn: () =>
+      apiPost(`/time-bank/${id}/adjustments`, {
+        direction,
+        hours: Number(hours),
+        minutes: Number(minutes),
+        note,
+      }),
+    onSuccess: () => {
+      toast.success('Lançamento registrado. O funcionário foi notificado.');
+      setNote('');
+      setHours('0');
+      setMinutes('0');
+      void queryClient.invalidateQueries({ queryKey: ['time-bank', id] });
+      void queryClient.invalidateQueries({ queryKey: ['team-bank'] });
+    },
+    onError: (error: unknown) => toast.error(error instanceof ApiError ? error.message : 'Erro ao lançar'),
   });
   const saveSchedule = useMutation({
     mutationFn: () =>
@@ -88,6 +114,44 @@ export default function EmployeeDetailPage() {
             </div>
             <Button onClick={() => adjust.mutate()} disabled={!reason || !occurredAt}>
               Registrar ajuste
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Banco de horas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Saldo atual <span className="font-medium tabular-nums text-foreground">{bank?.balanceFormatted ?? '—'}</span>
+            </p>
+            <div className="space-y-1">
+              <Label>Lançamento</Label>
+              <select
+                className="h-10 w-full rounded-lg border bg-card px-3 text-sm"
+                value={direction}
+                onChange={(event) => setDirection(event.target.value as 'CREDITO' | 'DEBITO')}
+              >
+                <option value="CREDITO">Crédito (saldo)</option>
+                <option value="DEBITO">Débito</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Horas</Label>
+                <Input type="number" min={0} max={200} value={hours} onChange={(event) => setHours(event.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Minutos</Label>
+                <Input type="number" min={0} max={59} value={minutes} onChange={(event) => setMinutes(event.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Observação</Label>
+              <Textarea value={note} onChange={(event) => setNote(event.target.value)} />
+            </div>
+            <Button onClick={() => adjustBank.mutate()} disabled={note.trim().length < 3 || adjustBank.isPending}>
+              Lançar no banco
             </Button>
           </CardContent>
         </Card>

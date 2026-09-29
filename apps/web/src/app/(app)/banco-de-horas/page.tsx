@@ -9,11 +9,20 @@ type Bank = {
   balanceFormatted: string;
   transactions: Array<{
     id: string;
+    type: string;
     workDate: string;
+    note: string | null;
     expectedFormatted: string;
     workedFormatted: string;
     deltaFormatted: string;
   }>;
+};
+
+const typeLabel: Record<string, string> = {
+  DAILY_BALANCE: 'Apuração',
+  ADJUSTMENT: 'Ajuste',
+  TIME_OFF: 'Folga',
+  RECALCULATION: 'Recálculo',
 };
 
 export default function TimeBankPage() {
@@ -42,18 +51,22 @@ export default function TimeBankPage() {
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="py-2">Data</th>
+                <th>Tipo</th>
                 <th>Previsto</th>
                 <th>Trabalhado</th>
                 <th>Saldo</th>
+                <th>Observação</th>
               </tr>
             </thead>
             <tbody>
               {data?.transactions.map((tx) => (
                 <tr key={tx.id} className="border-b last:border-0">
                   <td className="py-2">{formatDateBR(tx.workDate)}</td>
+                  <td>{typeLabel[tx.type] ?? tx.type}</td>
                   <td>{tx.expectedFormatted}</td>
                   <td>{tx.workedFormatted}</td>
                   <td className="font-medium tabular-nums">{tx.deltaFormatted}</td>
+                  <td>{tx.note ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

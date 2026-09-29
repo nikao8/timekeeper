@@ -1,8 +1,10 @@
 import { createClient } from '@libsql/client';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { ensureRootEnv } from '../src/prisma/create-client';
 
 async function main() {
+  ensureRootEnv();
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
   if (!url?.startsWith('libsql://') || !authToken) {
